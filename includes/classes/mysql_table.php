@@ -431,8 +431,12 @@ abstract class mysql_table
         }
         $result = $this->query($query);
         $this->clearCache();
-        if ($result && empty($this->$pk)) {
-            $this->$pk = $this->mysql->getInsertId($result);
+        if ($result) {
+            if (!is_array($pk)) {
+                if (empty($this->$pk)) {
+                    $this->$pk = $this->mysql->getInsertId($result);
+                }
+            }
         }
         $this->_isNewRecord = false;
         return $result;
