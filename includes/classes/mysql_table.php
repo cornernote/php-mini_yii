@@ -44,6 +44,13 @@ abstract class mysql_table
     private $_schema = array();
 
     /**
+     * Stores if the row is a new unsaved record
+     *
+     * @var bool
+     */
+    private $_isNewRecord = true;
+
+    /**
      * Returns a property value.
      * Do not call this method. This is a PHP magic method that we override to allow using the following syntax to read a property:
      * <pre>
@@ -60,7 +67,13 @@ abstract class mysql_table
         if (method_exists($this, $getter))
             return $this->$getter();
 
-        if ($name == $this->primaryKey || in_array($name, $this->fields))
+        if (in_array($name, $this->fields))
+            return null;
+
+        if (!is_array($this->primaryKey) && $name == $this->primaryKey)
+            return null;
+
+        if (is_array($this->primaryKey) && in_array($name, $this->primaryKey))
             return null;
 
         throw new Exception(strtr('Property "{class}.{property}" is not defined.', array(
@@ -87,7 +100,13 @@ abstract class mysql_table
         if (method_exists($this, $setter))
             return $this->$setter($value);
 
-        if ($name == $this->primaryKey || in_array($name, $this->fields))
+        if (in_array($name, $this->fields))
+            return $this->$name = $value;
+
+        if (!is_array($this->primaryKey) && $name == $this->primaryKey)
+            return $this->$name = $value;
+
+        if (is_array($this->primaryKey) && in_array($name, $this->primaryKey))
             return $this->$name = $value;
 
         if (method_exists($this, 'get' . $name))
@@ -134,10 +153,7 @@ abstract class mysql_table
      */
     public function getCache($key, $usePk = true)
     {
-        $key = $this->getCacheKeyPrefix($usePk) . '_' . get_class($this) . '_' . $key;
-        if ($usePk) {
-            $key .= '_' . $this->{$this->primaryKey};
-        }
+        $key = $this->getCacheKey($key, $usePk);
         return cache::get($key);
     }
 
@@ -152,10 +168,7 @@ abstract class mysql_table
      */
     public function setCache($key, $data, $ttl = null, $usePk = true)
     {
-        $key = $this->getCacheKeyPrefix($usePk) . '_' . get_class($this) . '_' . $key;
-        if ($usePk) {
-            $key .= '_' . $this->{$this->primaryKey};
-        }
+        $key = $this->getCacheKey($key, $usePk);
         return cache::set($key, $data, $ttl);
     }
 
@@ -171,6 +184,19 @@ abstract class mysql_table
     }
 
     /**
+     * Get cache relating to this table class
+     *
+     * @param $key
+     * @param $usePk
+     * @return mixed
+     */
+    public function getCacheKey($key, $usePk = true)
+    {
+        $key = $this->getCacheKeyPrefix($usePk) . '_' . get_class($this) . '_' . $key;
+        return $key;
+    }
+
+    /**
      * @param bool $usePk
      * @param bool $removeOldKey
      * @return bool|string
@@ -179,8 +205,16 @@ abstract class mysql_table
     {
         $key = 'getCacheKeyPrefix.' . get_class($this);
         if ($usePk) {
-            $key .= '_' . $this->{$this->primaryKey};
+            if (is_array($this->primaryKey)) {
+                foreach ($this->primaryKey as $field) {
+                    $key .= '_' . $this->$field;
+                }
+            }
+            else {
+                $key .= '_' . $this->{$this->primaryKey};
+            }
         }
+
         $prefix = false;
         if (!$removeOldKey) {
             $prefix = cache::get($key);
@@ -213,6 +247,16 @@ abstract class mysql_table
     }
 
     /**
+     * Is this a new record that has not yet been saved
+     *
+     * @return array
+     */
+    public function getIsNewRecord()
+    {
+        return $this->_isNewRecord;
+    }
+
+    /**
      * Name of the primary key field
      *
      * @return bool|string|array
@@ -230,7 +274,7 @@ abstract class mysql_table
         if (!$fields)
             return false;
         if (count($fields) == 1)
-            return $fields[0];
+            return $this->_primaryKey = $fields[0];
 
         return $this->_primaryKey = $fields;
     }
@@ -298,7 +342,14 @@ abstract class mysql_table
             $fields[] = "`$field`";
         }
         if ($this->primaryKey) {
-            $fields = array_merge($fields, array('`' . $this->primaryKey . '`'));
+            if (is_array($this->primaryKey)) {
+                foreach ($this->primaryKey as $pk) {
+                    $fields[] = "`$pk`";
+                }
+            }
+            else {
+                $fields = array_merge($fields, array('`' . $this->primaryKey . '`'));
+            }
         }
 
         // get results
@@ -306,6 +357,7 @@ abstract class mysql_table
         foreach ($results as $k => $result) {
             $class = get_class($this);
             $model = new $class;
+            $model->_isNewRecord = false;
             foreach ($result as $kk => $vv) {
                 $model->$kk = $vv;
             }
@@ -335,6 +387,13 @@ abstract class mysql_table
      */
     public function findByPk($pk)
     {
+        if (is_array($this->primaryKey)) {
+            $where = array();
+            foreach ($this->primaryKey as $field) {
+                $where[] = "`" . $field . "`='" . $pk[$field] . "'";
+            }
+            return $this->find(implode(' AND ', $where));
+        }
         return $this->find("`" . $this->primaryKey . "`='" . $pk . "'");
     }
 
@@ -353,15 +412,29 @@ abstract class mysql_table
                 $fields[] = "`$field`='$value'";
             }
         }
-        $query = (isset($this->$pk) ? "UPDATE" : "INSERT INTO") . " `" . $this->table . "` SET " . implode(', ', $fields);
-        if (isset($this->$pk)) {
-            $query .= " WHERE `" . $this->primaryKey . "`='" . (int)$this->$pk . "'";
+        $query = ($this->isNewRecord ? "INSERT INTO" : "UPDATE") . " `" . $this->table . "` SET " . implode(', ', $fields);
+        if (!$this->isNewRecord) {
+            if (is_array($pk)) {
+                $where = array();
+                foreach ($pk as $field) {
+                    if ($this->$field) {
+                        $where[] = "`" . $field . "`='" . (int)$this->$field . "'";
+                    }
+                }
+                if ($where) {
+                    $query .= " WHERE " . implode(' AND ', $where);
+                }
+            }
+            else {
+                $query .= " WHERE `" . $this->primaryKey . "`='" . (int)$this->$pk . "'";
+            }
         }
         $result = $this->query($query);
         $this->clearCache();
         if ($result && empty($this->$pk)) {
             $this->$pk = $this->mysql->getInsertId($result);
         }
+        $this->_isNewRecord = false;
         return $result;
     }
 
@@ -373,10 +446,19 @@ abstract class mysql_table
     public function delete()
     {
         $pk = $this->primaryKey;
-        if (!isset($this->$pk)) {
+        if ($this->isNewRecord) {
             return false;
         }
-        $query = "DELETE FROM `" . $this->table . "` WHERE `" . $this->primaryKey . "`='" . (int)$this->$pk . "'";
+        if (is_array($pk)) {
+            $where = array();
+            foreach ($pk as $field) {
+                $where[] = "`" . $field . "`='" . (int)$this->$field . "'";
+            }
+            $query = "DELETE FROM `" . $this->table . "` WHERE " . implode(' AND ', $where);
+        }
+        else {
+            $query = "DELETE FROM `" . $this->table . "` WHERE `" . $this->primaryKey . "`='" . (int)$this->$pk . "'";
+        }
         $result = $this->query($query);
         $this->clearCache();
         return $result;
