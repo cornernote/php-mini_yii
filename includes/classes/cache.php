@@ -32,14 +32,14 @@ class cache
      *
      * @var cache
      */
-    private static $_cache = array();
+    private static $_cache;
 
     /**
      * Stores the cache_id as a prefix so cache can be cleared
      *
      * @var string
      */
-    private $_cache_id = array();
+    private $_cache_id;
 
     /**
      * Stores the memcache connection
@@ -62,7 +62,7 @@ class cache
     /**
      * Initialize and set options
      */
-    public static function init($options=array())
+    public static function init($options = array())
     {
         if (self::$_cache) return self::$_cache;
         self::$_cache = new cache();
@@ -172,6 +172,7 @@ class cache
             if (file_exists($key . '.time')) unlink($key . '.time');
             if (file_exists($key . '.data')) unlink($key . '.data');
         }
+
     }
 
 
@@ -182,6 +183,7 @@ class cache
     {
         // delete the cache_id will unlink all the cache
         self::$_cache->delete('_cache_id');
+        self::$_cache->_cache_id = null;
     }
 
     /**
