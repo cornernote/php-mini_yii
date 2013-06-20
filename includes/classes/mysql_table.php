@@ -233,7 +233,7 @@ abstract class mysql_table
      */
     protected function getMysql()
     {
-        return $_ENV['mysql']['default'];
+        return mysql::instance();
     }
 
     /**

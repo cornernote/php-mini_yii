@@ -25,4 +25,13 @@ session_start();
 
 // connect to database
 cache::init();
-$_ENV['mysql']['default'] = new mysql('localhost', 'root', '', 'testdb');
+new mysql('default', 'localhost', 'root', '', 'test');
+
+// connect to an existing connection
+//$connection2 = mysql_connect('localhost', 'root', '', true);
+//mysql_select_db('test2', $connection2);
+//debug($connection2, 'connection2');
+//new mysql('db2', $connection2);
+
+// connect to another database
+//new mysql('db3', 'localhost', 'root', '', 'test3');

@@ -23,7 +23,7 @@ if (empty($content)) $content = '';
 </head>
 <body>
 
-<?php render('elements/menu'); ?>
+<?php //render('elements/menu'); ?>
 <?php echo $content; ?>
 
 </body>
