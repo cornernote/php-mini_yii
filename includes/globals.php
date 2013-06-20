@@ -29,12 +29,12 @@ function debug($var = null, $name = null)
 }
 
 /**
- * @param string $db
+ * @param string $id
  * @return mysql
  */
-function db($db = 'default')
+function db($id = null)
 {
-    return $_ENV['mysql'][$db];
+    return mysql::instance($id);
 }
 
 /**
