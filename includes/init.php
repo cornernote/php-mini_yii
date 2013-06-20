@@ -10,12 +10,12 @@
 $_ENV['bp'] = dirname(dirname(__FILE__)); // base path
 
 // functions
-require('includes/globals.php');
+require($_ENV['bp'] . '/includes/globals.php');
 
 // classes
-require('includes/classes/cache.php');
-require('includes/classes/mysql.php');
-require('includes/classes/mysql_table.php');
+require($_ENV['bp'] . '/includes/classes/cache.php');
+require($_ENV['bp'] . '/includes/classes/mysql.php');
+require($_ENV['bp'] . '/includes/classes/mysql_table.php');
 
 // models
 foreach (glob('includes/models/*.php') as $model) require($model);
